@@ -1,12 +1,13 @@
 package com.maiku.maikudoku.ui.game
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,8 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -30,9 +34,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color.Companion.hsl
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,27 +63,35 @@ fun GameScreen(
             TopAppBar(
                 title = { Text(text = stringResource(id = R.string.app_name), fontWeight = FontWeight.Bold) },
                 actions = {
-                    TextButton(onClick = { showExitDialog = true }) {
-                        Text(text = stringResource(id = R.string.game_home_button))
+                    IconButton(onClick = { showExitDialog = true }) {
+                        Icon(
+                            painter = painterResource(id = android.R.drawable.ic_delete),
+                            contentDescription = stringResource(id = R.string.game_home_button),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             )
         }
     ) { innerPadding ->
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.Top
+
         ) {
             Text(
-                text = stringResource(
-                    id = R.string.game_difficulty_label,
-                    uiState.difficulty.displayName
-                ),
+                text = stringResource(id = R.string.game_difficulty_label),
                 style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = uiState.difficulty.displayName,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
 
@@ -134,13 +150,19 @@ fun GameScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = { showExitDialog = false }) {
-                        Text(text = stringResource(id = R.string.game_exit_dialog_cancel), color = Color.Blue)
+                        Text(
+                            text = stringResource(id = R.string.game_exit_dialog_cancel),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     TextButton(onClick = {
                         showExitDialog = false
                         onNavigateHome()
                     }) {
-                        Text(text = stringResource(id = R.string.game_exit_dialog_confirm), color = Color.Red)
+                        Text(
+                            text = stringResource(id = R.string.game_exit_dialog_confirm),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -157,10 +179,38 @@ private fun SudokuGrid(
     onCellClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gridLineColor = MaterialTheme.colorScheme.outline
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
+            .background(MaterialTheme.colorScheme.background)
+            .drawWithContent {
+                drawContent()
+
+                val cellSize = size.width / 9f
+                val thin = 1.dp.toPx()
+                val thick = 2.dp.toPx()
+
+                for (i in 0..9) {
+                    val stroke = if (i % 3 == 0) thick else thin
+                    val position = i * cellSize
+
+                    drawLine(
+                        color = gridLineColor,
+                        start = Offset(position, 0f),
+                        end = Offset(position, size.height),
+                        strokeWidth = stroke
+                    )
+                    drawLine(
+                        color = gridLineColor,
+                        start = Offset(0f, position),
+                        end = Offset(size.width, position),
+                        strokeWidth = stroke
+                    )
+                }
+            }
     ) {
         board.forEachIndexed { rowIndex, row ->
             Row(
@@ -196,20 +246,20 @@ private fun SudokuCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = Color.White
+    val backgroundColor = MaterialTheme.colorScheme.background
 
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .border(width = 1.dp, color = Color.Gray)
             .background(color = backgroundColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = if (value == 0) "" else value.toString(),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (isFixed) FontWeight.Bold else FontWeight.Normal
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Normal,
+            color = hsl(36f, 1f, 0.163f)
         )
     }
 }
@@ -234,26 +284,29 @@ private fun NumberPad(
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        (1..9).chunked(3).forEach { rowValues ->
-            Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-                rowValues.forEach { value ->
-                    Button(
-                        onClick = { onValueSelected(value) },
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Text(text = value.toString())
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+            (1..9).forEach { value ->
+                Button(
+                    onClick = { onValueSelected(value) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .aspectRatio(1f),
+                    shape = RoundedCornerShape(0.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = value.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = onClear,
-                modifier = Modifier.padding(4.dp)
-            ) {
-                Text(text = stringResource(id = R.string.game_clear_button))
             }
         }
     }
