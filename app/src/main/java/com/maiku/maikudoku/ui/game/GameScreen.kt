@@ -53,7 +53,7 @@ fun GameScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text(text = stringResource(id = R.string.app_name)) },
+                title = { Text(text = stringResource(id = R.string.app_name), fontWeight = FontWeight.Bold) },
                 actions = {
                     TextButton(onClick = { showExitDialog = true }) {
                         Text(text = stringResource(id = R.string.game_home_button))
@@ -127,17 +127,21 @@ fun GameScreen(
             onDismissRequest = { showExitDialog = false },
             title = { Text(text = stringResource(id = R.string.game_exit_dialog_title)) },
             text = { Text(text = stringResource(id = R.string.game_exit_dialog_message)) },
-            dismissButton = {
-                TextButton(onClick = { showExitDialog = false }) {
-                    Text(text = stringResource(id = R.string.game_exit_dialog_cancel))
-                }
-            },
             confirmButton = {
-                TextButton(onClick = {
-                    showExitDialog = false
-                    onNavigateHome()
-                }) {
-                    Text(text = stringResource(id = R.string.game_exit_dialog_confirm))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showExitDialog = false }) {
+                        Text(text = stringResource(id = R.string.game_exit_dialog_cancel), color = Color.Blue)
+                    }
+                    TextButton(onClick = {
+                        showExitDialog = false
+                        onNavigateHome()
+                    }) {
+                        Text(text = stringResource(id = R.string.game_exit_dialog_confirm), color = Color.Red)
+                    }
                 }
             }
         )
@@ -157,8 +161,6 @@ private fun SudokuGrid(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .border(width = 2.dp, color = MaterialTheme.colorScheme.primary)
-            .padding(4.dp)
     ) {
         board.forEachIndexed { rowIndex, row ->
             Row(
@@ -194,20 +196,13 @@ private fun SudokuCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = when {
-        isInvalid -> Color(0xFFFFD7D7)
-        isSelected -> Color(0xFFDDEBFF)
-        isRelatedToSelection -> Color(0xFFF3F7FF)
-        isFixed -> Color(0xFFEAEAEA)
-        else -> Color.White
-    }
+    val backgroundColor = Color.White
 
     Box(
         modifier = modifier
-            .padding(1.dp)
             .aspectRatio(1f)
-            .border(width = 1.dp, color = Color.Gray, shape = RoundedCornerShape(2.dp))
-            .background(color = backgroundColor, shape = RoundedCornerShape(2.dp))
+            .border(width = 1.dp, color = Color.Gray)
+            .background(color = backgroundColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -241,7 +236,7 @@ private fun NumberPad(
 ) {
     Column(modifier = modifier) {
         (1..9).chunked(3).forEach { rowValues ->
-            Row(horizontalArrangement = Arrangement.Center) {
+            Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
                 rowValues.forEach { value ->
                     Button(
                         onClick = { onValueSelected(value) },
@@ -253,7 +248,7 @@ private fun NumberPad(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = onClear,
                 modifier = Modifier.padding(4.dp)
@@ -263,4 +258,3 @@ private fun NumberPad(
         }
     }
 }
-
