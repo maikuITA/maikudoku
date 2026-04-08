@@ -11,11 +11,8 @@ import com.maiku.maikudoku.domain.sudoku.SudokuGenerator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,9 +48,8 @@ class SudokuViewModel(
         SudokuUiState(difficulty = selectedDifficulty)
     )
     val uiState: StateFlow<SudokuUiState> = _uiState.asStateFlow()
-    val completedNumbers: StateFlow<Set<Int>> = uiState
-        .map { state -> computeCompletedNumbers(state.gridState) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    private val _completedNumbers = MutableStateFlow<Set<Int>>(emptySet())
+    val completedNumbers: StateFlow<Set<Int>> = _completedNumbers.asStateFlow()
 
     init {
         generateBoard()
@@ -63,6 +59,7 @@ class SudokuViewModel(
     fun generateBoard() {
         viewModelScope.launch {
             cancelErrorResetJobs()
+            _completedNumbers.value = emptySet()
             _uiState.update { it.copy(isLoading = true) }
             val generatedBoard = generator.generate(selectedDifficulty)
             val gridState = generatedBoard.cells.mapIndexed { rowIndex, row ->
@@ -88,6 +85,7 @@ class SudokuViewModel(
                     showGameOverDialog = false
                 )
             }
+            _completedNumbers.value = computeCompletedNumbers(gridState)
         }
     }
 
@@ -144,6 +142,7 @@ class SudokuViewModel(
         if (targetCell != null && targetValue != null) {
             scheduleInvalidCellReset(targetCell, targetValue)
         }
+        refreshCompletedNumbers()
     }
 
     fun clearSelectedCell() {
@@ -168,6 +167,7 @@ class SudokuViewModel(
             )
             buildUpdatedState(currentState, newGrid)
         }
+        refreshCompletedNumbers()
     }
 
     private fun startTimer() {
@@ -219,6 +219,7 @@ class SudokuViewModel(
 
                 buildUpdatedState(currentState, newGrid)
             }
+            refreshCompletedNumbers()
             errorResetJobs.remove(position)
         }
     }
@@ -226,6 +227,10 @@ class SudokuViewModel(
     private fun cancelErrorResetJobs() {
         errorResetJobs.values.forEach { it.cancel() }
         errorResetJobs.clear()
+    }
+
+    private fun refreshCompletedNumbers() {
+        _completedNumbers.value = computeCompletedNumbers(_uiState.value.gridState)
     }
 
 

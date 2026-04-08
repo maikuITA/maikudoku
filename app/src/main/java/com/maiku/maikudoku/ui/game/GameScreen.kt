@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maiku.maikudoku.R
@@ -78,7 +81,7 @@ fun GameScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -106,7 +109,7 @@ fun GameScreen(
                     formatPlayTime(uiState.playTimeSeconds)
                 ),
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.Black,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(4.dp)
             )
@@ -154,14 +157,14 @@ fun GameScreen(
                         Text(
                             text = stringResource(id = R.string.game_invalid_moves_message),
                             color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 21.sp)
                         )
                     } else {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(id = R.string.game_all_good),
-                            color = Color.Black,
-                            style = MaterialTheme.typography.bodyMedium
+                            color = MaterialTheme.colorScheme.tertiary,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 21.sp)
                         )
                     }
                 }
@@ -240,7 +243,7 @@ private fun SudokuGrid(
     onCellClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val gridLineColor = Color.Black
+    val gridLineColor = MaterialTheme.colorScheme.onSurface
     val selectedValue = selectedCell?.let { gridState[it.row][it.col].value } ?: 0
 
     Column(
@@ -364,24 +367,31 @@ private fun NumberPad(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
-            (1..9).forEach { value ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            (1..9).forEach { number ->
                 Button(
-                    onClick = { onValueSelected(value) },
-                    enabled = value !in completedNumbers,
+                    onClick = { onValueSelected(number) },
+                    enabled = number !in completedNumbers,
                     modifier = Modifier
                         .weight(1f)
+                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
                         .aspectRatio(1f),
+                    contentPadding = PaddingValues(0.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.background,
-                        disabledContentColor = Color.Gray
+                        contentColor = Color.Black,
+                        disabledContainerColor = MaterialTheme.colorScheme.background,
+                        disabledContentColor = Color(0xFF616161)
                     )
                 ) {
                     Text(
-                        text = value.toString(),
+                        text = number.toString(),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Normal,
-                        color = Color.Black
+                        maxLines = 1
                     )
                 }
             }
