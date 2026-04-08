@@ -390,7 +390,7 @@ private fun NumberPad(
                         containerColor = MaterialTheme.colorScheme.background,
                         contentColor = Color.Black,
                         disabledContainerColor = MaterialTheme.colorScheme.background,
-                        disabledContentColor = Color(0xFF616161)
+                        disabledContentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Text(
