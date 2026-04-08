@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maiku.maikudoku.R
@@ -59,6 +60,10 @@ fun GameScreen(
     val completedNumbers by viewModel.completedNumbers.collectAsStateWithLifecycle()
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = !uiState.showGameOverDialog) {
+        showExitDialog = true
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
