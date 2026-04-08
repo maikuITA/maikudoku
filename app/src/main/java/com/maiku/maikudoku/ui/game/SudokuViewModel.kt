@@ -59,12 +59,8 @@ class SudokuViewModel(
 
     fun selectCell(row: Int, col: Int) {
         _uiState.update { currentState ->
-            val board = currentState.board ?: return@update currentState
-            if (board.fixed[row][col]) {
-                currentState.copy(selectedCell = null)
-            } else {
-                currentState.copy(selectedCell = CellPosition(row = row, col = col))
-            }
+            if (currentState.board == null) return@update currentState
+            currentState.copy(selectedCell = CellPosition(row = row, col = col))
         }
     }
 

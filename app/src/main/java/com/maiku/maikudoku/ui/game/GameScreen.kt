@@ -32,7 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color.Companion.hsl
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -178,7 +178,8 @@ private fun SudokuGrid(
     onCellClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val gridLineColor = MaterialTheme.colorScheme.outline
+    val gridLineColor = Color.Black
+    val selectedValue = selectedCell?.let { board[it.row][it.col] } ?: 0
 
     Column(
         modifier = modifier
@@ -223,6 +224,8 @@ private fun SudokuGrid(
                         isFixed = isFixed,
                         isSelected = selectedCell == position,
                         isInSelectedBlock = isInSelectedBlock(selectedCell, position),
+                        isInSelectedRowOrColumn = isInSelectedRowOrColumn(selectedCell, position),
+                        hasSameValueAsSelected = selectedValue != 0 && value == selectedValue,
                         isInvalid = position in invalidCells,
                         onClick = { onCellClick(rowIndex, colIndex) },
                         modifier = Modifier.weight(1f)
@@ -239,17 +242,25 @@ private fun SudokuCell(
     isFixed: Boolean,
     isSelected: Boolean,
     isInSelectedBlock: Boolean,
+    isInSelectedRowOrColumn: Boolean,
+    hasSameValueAsSelected: Boolean,
     isInvalid: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val backgroundColor = when {
-        isSelected -> MaterialTheme.colorScheme.tertiary
+        isSelected -> MaterialTheme.colorScheme.surfaceVariant
+        hasSameValueAsSelected -> MaterialTheme.colorScheme.tertiary
         isInSelectedBlock -> MaterialTheme.colorScheme.tertiary
+        isInSelectedRowOrColumn -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.background
     }
 
-    val textColor = MaterialTheme.colorScheme.secondary
+    val textColor = when {
+        isInvalid && value != 0 -> MaterialTheme.colorScheme.error
+        isFixed -> Color.Black
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Box(
         modifier = modifier
@@ -277,6 +288,15 @@ private fun isInSelectedBlock(
         (selectedCell.col / 3 == currentCell.col / 3)
 }
 
+private fun isInSelectedRowOrColumn(
+    selectedCell: CellPosition?,
+    currentCell: CellPosition
+): Boolean {
+    if (selectedCell == null || selectedCell == currentCell) return false
+
+    return selectedCell.row == currentCell.row || selectedCell.col == currentCell.col
+}
+
 @Composable
 private fun NumberPad(
     onValueSelected: (Int) -> Unit,
@@ -298,7 +318,7 @@ private fun NumberPad(
                         text = value.toString(),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Normal,
-                        color = hsl(36f, 1f, 0.163f)
+                        color = Color.Black
                     )
                 }
             }
