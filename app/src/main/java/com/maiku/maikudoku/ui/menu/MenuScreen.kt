@@ -79,7 +79,7 @@ fun MenuScreen(
                 ) {
                     Text(
                         text = difficulty.displayName,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Normal,
                         style = MaterialTheme.typography.bodyLarge.copy(fontSize = 21.sp),
                         color = MaterialTheme.colorScheme.primary
                     )

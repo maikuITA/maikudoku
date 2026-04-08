@@ -4,9 +4,10 @@
     <string name="menu_history_button">Match history</string>
     <string name="game_home_button">Home</string>
     <string name="game_difficulty_label">Difficulty:</string>
+    <string name="game_timer_label">%1$s</string>
     <string name="game_new_grid_button">New game</string>
     <string name="game_completed_message">Sudoku completed!</string>
-    <string name="game_invalid_moves_message">There are invalid moves</string>
+    <string name="game_invalid_moves_message">Error: you made a mistake!</string>
     <string name="game_grid_generation_error">Unable to generate the grid</string>
     <string name="game_exit_dialog_title">Return to Home?</string>
     <string name="game_exit_dialog_message">You will lose all progress in this game!</string>

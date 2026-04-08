@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,7 +40,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.maiku.maikudoku.R
+import com.maiku.maikudoku.domain.model.CellState
+import java.util.Locale
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,9 +55,21 @@ fun GameScreen(
     viewModel: SudokuViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val board = uiState.board
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.persistCurrentGame()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -96,16 +114,25 @@ fun GameScreen(
                 )
             }
 
+            Text(
+                text = stringResource(
+                    id = R.string.game_timer_label,
+                    formatPlayTime(uiState.playTimeSeconds)
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.Black,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(4.dp)
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
 
             when {
                 uiState.isLoading -> CircularProgressIndicator()
-                board != null && uiState.userBoard.isNotEmpty() -> {
+                uiState.gridState.isNotEmpty() -> {
                     SudokuGrid(
-                        board = uiState.userBoard,
-                        fixed = board.fixed,
+                        gridState = uiState.gridState,
                         selectedCell = uiState.selectedCell,
-                        invalidCells = uiState.invalidCells,
                         onCellClick = viewModel::selectCell,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -140,8 +167,9 @@ fun GameScreen(
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { },
-            title = { Text(text = stringResource(id = R.string.game_exit_dialog_title)) },
-            text = { Text(text = stringResource(id = R.string.game_exit_dialog_message)) },
+            title = { Text(text = stringResource(id = R.string.game_exit_dialog_title), fontWeight = FontWeight.Bold) },
+            text = { Text(text = stringResource(id = R.string.game_exit_dialog_message), fontWeight = FontWeight.Bold) },
+            containerColor = MaterialTheme.colorScheme.background,
             confirmButton = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -154,16 +182,19 @@ fun GameScreen(
                     }) {
                         Text(
                             text = stringResource(id = R.string.game_exit_dialog_cancel),
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     TextButton(onClick = {
                         @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
                         run { showExitDialog = false }
+                        viewModel.persistCurrentGame()
                         onNavigateHome()
                     }) {
                         Text(
                             text = stringResource(id = R.string.game_exit_dialog_confirm),
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -175,15 +206,13 @@ fun GameScreen(
 
 @Composable
 private fun SudokuGrid(
-    board: List<List<Int>>,
-    fixed: List<List<Boolean>>,
+    gridState: List<List<CellState>>,
     selectedCell: CellPosition?,
-    invalidCells: Set<CellPosition>,
     onCellClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val gridLineColor = Color.Black
-    val selectedValue = selectedCell?.let { board[it.row][it.col] } ?: 0
+    val selectedValue = selectedCell?.let { gridState[it.row][it.col].value } ?: 0
 
     Column(
         modifier = modifier
@@ -214,23 +243,20 @@ private fun SudokuGrid(
                 }
             }
     ) {
-        board.forEachIndexed { rowIndex, row ->
+        gridState.forEachIndexed { rowIndex, row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                row.forEachIndexed { colIndex, value ->
-                    val isFixed = fixed[rowIndex][colIndex]
+                row.forEachIndexed { colIndex, cell ->
                     val position = CellPosition(row = rowIndex, col = colIndex)
                     SudokuCell(
-                        value = value,
-                        isFixed = isFixed,
+                        cell = cell,
                         isSelected = selectedCell == position,
                         isInSelectedBlock = isInSelectedBlock(selectedCell, position),
                         isInSelectedRowOrColumn = isInSelectedRowOrColumn(selectedCell, position),
-                        hasSameValueAsSelected = selectedValue != 0 && value == selectedValue,
-                        isInvalid = position in invalidCells,
+                        hasSameValueAsSelected = selectedValue != 0 && cell.value == selectedValue,
                         onClick = { onCellClick(rowIndex, colIndex) },
                         modifier = Modifier.weight(1f)
                     )
@@ -242,13 +268,11 @@ private fun SudokuGrid(
 
 @Composable
 private fun SudokuCell(
-    value: Int,
-    isFixed: Boolean,
+    cell: CellState,
     isSelected: Boolean,
     isInSelectedBlock: Boolean,
     isInSelectedRowOrColumn: Boolean,
     hasSameValueAsSelected: Boolean,
-    isInvalid: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -260,11 +284,7 @@ private fun SudokuCell(
         else -> MaterialTheme.colorScheme.background
     }
 
-    val textColor = when {
-        isInvalid && value != 0 -> MaterialTheme.colorScheme.error
-        isFixed -> Color.Black
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val textColor = if (cell.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = modifier
@@ -274,7 +294,7 @@ private fun SudokuCell(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = if (value == 0) "" else value.toString(),
+            text = if (cell.value == 0) "" else cell.value.toString(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Normal,
             color = textColor
@@ -299,6 +319,13 @@ private fun isInSelectedRowOrColumn(
     if (selectedCell == null || selectedCell == currentCell) return false
 
     return selectedCell.row == currentCell.row || selectedCell.col == currentCell.col
+}
+
+private fun formatPlayTime(totalSeconds: Long): String {
+    val safeSeconds = totalSeconds.coerceAtLeast(0L)
+    val minutes = safeSeconds / 60
+    val seconds = safeSeconds % 60
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
 @Composable

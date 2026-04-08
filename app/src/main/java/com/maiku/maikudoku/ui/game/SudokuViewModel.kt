@@ -1,15 +1,23 @@
 package com.maiku.maikudoku.ui.game
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.maiku.maikudoku.data.GameRepository
+import com.maiku.maikudoku.domain.model.CellState
 import com.maiku.maikudoku.domain.model.Difficulty
+import com.maiku.maikudoku.domain.model.GameSaveState
 import com.maiku.maikudoku.domain.sudoku.SudokuBoard
 import com.maiku.maikudoku.domain.sudoku.SudokuGenerator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class CellPosition(val row: Int, val col: Int)
@@ -17,19 +25,23 @@ data class CellPosition(val row: Int, val col: Int)
 data class SudokuUiState(
     val difficulty: Difficulty = Difficulty.EASY,
     val board: SudokuBoard? = null,
-    val userBoard: List<List<Int>> = emptyList(),
+    val gridState: List<List<CellState>> = emptyList(),
     val selectedCell: CellPosition? = null,
     val invalidCells: Set<CellPosition> = emptySet(),
     val isCompleted: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val playTimeSeconds: Long = 0L
 )
 
 class SudokuViewModel(
+    application: Application,
     savedStateHandle: SavedStateHandle
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     private val generator = SudokuGenerator()
     private val selectedDifficulty = Difficulty.fromRoute(savedStateHandle.get<String>("difficulty"))
+    private val repository = GameRepository.from(application)
+    private var timerJob: Job? = null
 
     private val _uiState = MutableStateFlow(
         SudokuUiState(difficulty = selectedDifficulty)
@@ -37,23 +49,57 @@ class SudokuViewModel(
     val uiState: StateFlow<SudokuUiState> = _uiState.asStateFlow()
 
     init {
-        generateBoard()
+        restoreOrCreateGame()
+        startTimer()
+    }
+
+    private fun restoreOrCreateGame() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val savedState = repository.loadGame().first()
+
+            if (savedState == null || Difficulty.fromRoute(savedState.difficulty) != selectedDifficulty) {
+                generateBoard()
+                return@launch
+            }
+
+            restoreFromSave(savedState)
+        }
     }
 
     fun generateBoard() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val generatedBoard = generator.generate(selectedDifficulty)
+            val gridState = generatedBoard.cells.mapIndexed { rowIndex, row ->
+                row.mapIndexed { colIndex, value ->
+                    CellState(
+                        value = value,
+                        notes = emptyList(),
+                        isFixed = generatedBoard.fixed[rowIndex][colIndex],
+                        isError = false
+                    )
+                }
+            }
             _uiState.update {
                 it.copy(
                     board = generatedBoard,
-                    userBoard = generatedBoard.cells,
+                    gridState = gridState,
                     selectedCell = null,
                     invalidCells = emptySet(),
                     isCompleted = false,
-                    isLoading = false
+                    isLoading = false,
+                    playTimeSeconds = 0L
                 )
             }
+            persistCurrentGame()
+        }
+    }
+
+    fun persistCurrentGame() {
+        viewModelScope.launch {
+            val saveState = _uiState.value.toGameSaveState() ?: return@launch
+            repository.saveGame(saveState)
         }
     }
 
@@ -68,47 +114,158 @@ class SudokuViewModel(
         if (value !in 1..9) return
 
         _uiState.update { currentState ->
-            val board = currentState.board ?: return@update currentState
             val selectedCell = currentState.selectedCell ?: return@update currentState
 
-            if (board.fixed[selectedCell.row][selectedCell.col]) {
+            val currentCell = currentState.gridState.getOrNull(selectedCell.row)?.getOrNull(selectedCell.col)
+                ?: return@update currentState
+
+            if (currentCell.isFixed) {
                 return@update currentState
             }
 
-            val newBoard = currentState.userBoard.map { it.toMutableList() }
-            newBoard[selectedCell.row][selectedCell.col] = value
-            buildUpdatedState(currentState, newBoard)
+            val isValidMove = isPlacementValid(currentState.gridState, selectedCell.row, selectedCell.col, value)
+            val newGrid = currentState.gridState.map { it.toMutableList() }
+            newGrid[selectedCell.row][selectedCell.col] = currentCell.copy(
+                value = value,
+                isError = !isValidMove
+            )
+            buildUpdatedState(currentState, newGrid)
         }
+        persistCurrentGame()
     }
 
     fun clearSelectedCell() {
         _uiState.update { currentState ->
-            val board = currentState.board ?: return@update currentState
             val selectedCell = currentState.selectedCell ?: return@update currentState
 
-            if (board.fixed[selectedCell.row][selectedCell.col]) {
+            val currentCell = currentState.gridState.getOrNull(selectedCell.row)?.getOrNull(selectedCell.col)
+                ?: return@update currentState
+
+            if (currentCell.isFixed) {
                 return@update currentState
             }
 
-            val newBoard = currentState.userBoard.map { it.toMutableList() }
-            newBoard[selectedCell.row][selectedCell.col] = 0
-            buildUpdatedState(currentState, newBoard)
+            val newGrid = currentState.gridState.map { it.toMutableList() }
+            newGrid[selectedCell.row][selectedCell.col] = currentCell.copy(
+                value = 0,
+                isError = false
+            )
+            buildUpdatedState(currentState, newGrid)
         }
+        persistCurrentGame()
+    }
+
+    private fun restoreFromSave(saveState: GameSaveState) {
+        val restoredDifficulty = Difficulty.fromRoute(saveState.difficulty)
+        val restoredGrid = saveState.gridState
+        val restoredCells = restoredGrid.map { row -> row.map { it.value } }
+        val restoredFixed = restoredGrid.map { row -> row.map { it.isFixed } }
+
+        _uiState.update {
+            val invalidCells = computeInvalidCells(restoredCells)
+            val isCompleted = invalidCells.isEmpty() && restoredCells.all { row -> row.all { value -> value != 0 } }
+
+            it.copy(
+                difficulty = restoredDifficulty,
+                board = SudokuBoard(
+                    cells = restoredCells,
+                    fixed = restoredFixed,
+                    // Solution is not required for current validation flow; keep restored snapshot.
+                    solution = restoredCells
+                ),
+                gridState = restoredGrid,
+                selectedCell = null,
+                invalidCells = invalidCells,
+                isCompleted = isCompleted,
+                isLoading = false,
+                playTimeSeconds = saveState.playTimeSeconds
+            )
+        }
+    }
+
+    private fun startTimer() {
+        if (timerJob != null) return
+        timerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1000)
+                _uiState.update { currentState ->
+                    if (currentState.board == null || currentState.isCompleted || currentState.isLoading) {
+                        currentState
+                    } else {
+                        currentState.copy(playTimeSeconds = currentState.playTimeSeconds + 1)
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        timerJob?.cancel()
+    }
+
+    private fun SudokuUiState.toGameSaveState(): GameSaveState? {
+        val serializableGrid = gridState
+        if (serializableGrid.size != 9 || serializableGrid.any { it.size != 9 }) return null
+
+        return GameSaveState(
+            difficulty = difficulty.routeValue,
+            playTimeSeconds = playTimeSeconds,
+            gridState = serializableGrid
+        )
     }
 
     private fun buildUpdatedState(
         currentState: SudokuUiState,
-        boardData: List<MutableList<Int>>
+        gridData: List<MutableList<CellState>>
     ): SudokuUiState {
-        val updatedBoard = boardData.map { it.toList() }
+        val updatedGrid = gridData.map { it.toList() }
+        val updatedBoard = updatedGrid.map { row -> row.map { it.value } }
         val invalidCells = computeInvalidCells(updatedBoard)
         val isCompleted = invalidCells.isEmpty() && updatedBoard.all { row -> row.all { it != 0 } }
 
         return currentState.copy(
-            userBoard = updatedBoard,
+            board = currentState.board?.copy(cells = updatedBoard),
+            gridState = updatedGrid,
             invalidCells = invalidCells,
             isCompleted = isCompleted
         )
+    }
+
+    private fun isPlacementValid(
+        grid: List<List<CellState>>,
+        row: Int,
+        col: Int,
+        value: Int
+    ): Boolean {
+        if (value == 0) return true
+
+        val rowHasConflict = grid[row].anyIndexed { currentCol, cell ->
+            currentCol != col && cell.value == value
+        }
+        if (rowHasConflict) return false
+
+        val colHasConflict = grid.anyIndexed { currentRow, rowCells ->
+            currentRow != row && rowCells[col].value == value
+        }
+        if (colHasConflict) return false
+
+        val startRow = (row / 3) * 3
+        val startCol = (col / 3) * 3
+        for (r in startRow until startRow + 3) {
+            for (c in startCol until startCol + 3) {
+                if ((r != row || c != col) && grid[r][c].value == value) return false
+            }
+        }
+
+        return true
+    }
+
+    private inline fun <T> List<T>.anyIndexed(predicate: (index: Int, T) -> Boolean): Boolean {
+        for (index in indices) {
+            if (predicate(index, this[index])) return true
+        }
+        return false
     }
 
     private fun computeInvalidCells(
