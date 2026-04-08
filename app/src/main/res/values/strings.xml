@@ -16,7 +16,7 @@
     <string name="game_exit_dialog_cancel">Cancel</string>
     <string name="game_exit_dialog_confirm">Exit</string>
     <string name="game_over_dialog_title">Game Over</string>
-    <string name="game_over_dialog_message">You made 3 mistakes. Try again!</string>
-    <string name="game_over_dialog_confirm">Back to Menu</string>
+    <string name="game_over_dialog_message">You made over 3 mistakes. Try again?</string>
+    <string name="game_over_dialog_confirm">HOME</string>
     <string name="game_clear_button">Clear</string>
 </resources>

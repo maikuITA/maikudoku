@@ -227,11 +227,12 @@ fun GameScreen(
                 TextButton(onClick = onNavigateHome) {
                     Text(
                         text = stringResource(id = R.string.game_over_dialog_confirm),
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
+            },
+            containerColor = MaterialTheme.colorScheme.background
         )
     }
 }

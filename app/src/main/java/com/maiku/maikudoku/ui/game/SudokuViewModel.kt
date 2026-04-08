@@ -41,6 +41,7 @@ class SudokuViewModel(
 
     private val generator = SudokuGenerator()
     private val selectedDifficulty = Difficulty.fromRoute(savedStateHandle.get<String>("difficulty"))
+    private var solutionGrid: Array<IntArray> = emptyArray()
     private var timerJob: Job? = null
     private val errorResetJobs = mutableMapOf<CellPosition, Job>()
 
@@ -62,6 +63,7 @@ class SudokuViewModel(
             _completedNumbers.value = emptySet()
             _uiState.update { it.copy(isLoading = true) }
             val generatedBoard = generator.generate(selectedDifficulty)
+            solutionGrid = generatedBoard.solution.map { it.toIntArray() }.toTypedArray()
             val gridState = generatedBoard.cells.mapIndexed { rowIndex, row ->
                 row.mapIndexed { colIndex, value ->
                     CellState(
@@ -116,7 +118,7 @@ class SudokuViewModel(
                 return@update currentState
             }
 
-            val isValidMove = isPlacementValid(currentState.gridState, selectedCell.row, selectedCell.col, value)
+            val isValidMove = isPlacementValid(selectedCell.row, selectedCell.col, value)
             val newGrid = currentState.gridState.map { it.toMutableList() }
             newGrid[selectedCell.row][selectedCell.col] = currentCell.copy(
                 value = value,
@@ -240,8 +242,8 @@ class SudokuViewModel(
     ): SudokuUiState {
         val updatedGrid = gridData.map { it.toList() }
         val updatedBoard = updatedGrid.map { row -> row.map { it.value } }
-        val invalidCells = computeInvalidCells(updatedBoard)
-        val isCompleted = invalidCells.isEmpty() && updatedBoard.all { row -> row.all { it != 0 } }
+        val invalidCells = computeInvalidCells(updatedGrid)
+        val isCompleted = isBoardSolved(updatedGrid)
 
         return currentState.copy(
             board = currentState.board?.copy(cells = updatedBoard),
@@ -251,102 +253,52 @@ class SudokuViewModel(
         )
     }
 
-    private fun isPlacementValid(
-        grid: List<List<CellState>>,
-        row: Int,
-        col: Int,
-        value: Int
-    ): Boolean {
-        if (value == 0) return true
-
-        val rowHasConflict = grid[row].anyIndexed { currentCol, cell ->
-            currentCol != col && cell.value == value
-        }
-        if (rowHasConflict) return false
-
-        val colHasConflict = grid.anyIndexed { currentRow, rowCells ->
-            currentRow != row && rowCells[col].value == value
-        }
-        if (colHasConflict) return false
-
-        val startRow = (row / 3) * 3
-        val startCol = (col / 3) * 3
-        for (r in startRow until startRow + 3) {
-            for (c in startCol until startCol + 3) {
-                if ((r != row || c != col) && grid[r][c].value == value) return false
-            }
-        }
-
-        return true
-    }
-
-    private inline fun <T> List<T>.anyIndexed(predicate: (index: Int, T) -> Boolean): Boolean {
-        for (index in indices) {
-            if (predicate(index, this[index])) return true
-        }
-        return false
+    private fun isPlacementValid(row: Int, col: Int, value: Int): Boolean {
+        val expectedValue = solutionGrid.getOrNull(row)?.getOrNull(col) ?: return false
+        return value == expectedValue
     }
 
     private fun computeInvalidCells(
-        current: List<List<Int>>
+        current: List<List<CellState>>
     ): Set<CellPosition> {
         val invalid = mutableSetOf<CellPosition>()
 
         for (row in 0 until 9) {
-            val positionsByValue = mutableMapOf<Int, MutableList<CellPosition>>()
             for (col in 0 until 9) {
-                val value = current[row][col]
-                if (value != 0) {
-                    positionsByValue.getOrPut(value) { mutableListOf() }
-                        .add(CellPosition(row = row, col = col))
+                val cell = current.getOrNull(row)?.getOrNull(col) ?: continue
+                val expectedValue = solutionGrid.getOrNull(row)?.getOrNull(col) ?: continue
+                if (cell.value != 0 && cell.value != expectedValue) {
+                    invalid.add(CellPosition(row = row, col = col))
                 }
-            }
-            positionsByValue.values.filter { it.size > 1 }.forEach { invalid.addAll(it) }
-        }
-
-        for (col in 0 until 9) {
-            val positionsByValue = mutableMapOf<Int, MutableList<CellPosition>>()
-            for (row in 0 until 9) {
-                val value = current[row][col]
-                if (value != 0) {
-                    positionsByValue.getOrPut(value) { mutableListOf() }
-                        .add(CellPosition(row = row, col = col))
-                }
-            }
-            positionsByValue.values.filter { it.size > 1 }.forEach { invalid.addAll(it) }
-        }
-
-        for (blockRow in 0 until 3) {
-            for (blockCol in 0 until 3) {
-                val positionsByValue = mutableMapOf<Int, MutableList<CellPosition>>()
-                val startRow = blockRow * 3
-                val startCol = blockCol * 3
-
-                for (row in startRow until startRow + 3) {
-                    for (col in startCol until startCol + 3) {
-                        val value = current[row][col]
-                        if (value != 0) {
-                            positionsByValue.getOrPut(value) { mutableListOf() }
-                                .add(CellPosition(row = row, col = col))
-                        }
-                    }
-                }
-
-                positionsByValue.values.filter { it.size > 1 }.forEach { invalid.addAll(it) }
             }
         }
 
         return invalid
     }
 
+    private fun isBoardSolved(grid: List<List<CellState>>): Boolean {
+        if (solutionGrid.isEmpty()) return false
+
+        for (row in 0 until 9) {
+            for (col in 0 until 9) {
+                val cell = grid.getOrNull(row)?.getOrNull(col) ?: return false
+                val expectedValue = solutionGrid.getOrNull(row)?.getOrNull(col) ?: return false
+                if (cell.value != expectedValue) return false
+            }
+        }
+
+        return true
+    }
+
     private fun computeCompletedNumbers(grid: List<List<CellState>>): Set<Int> {
-        if (grid.isEmpty()) return emptySet()
+        if (grid.isEmpty() || solutionGrid.isEmpty()) return emptySet()
 
         val counts = IntArray(10)
-        grid.forEach { row ->
-            row.forEach { cell ->
+        grid.forEachIndexed { rowIndex, row ->
+            row.forEachIndexed { colIndex, cell ->
                 val value = cell.value
-                if (value in 1..9 && !cell.isError) {
+                val expectedValue = solutionGrid.getOrNull(rowIndex)?.getOrNull(colIndex)
+                if (value in 1..9 && value == expectedValue) {
                     counts[value]++
                 }
             }
