@@ -53,7 +53,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MaikudokuTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     // Dynamic color available on Android 12+ (API 31+).
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
