@@ -6,8 +6,8 @@ Welcome to **Maikudoku**, the Sudoku app you can play anywhere, without distract
 
 ## ✨ Main Features
 
-🎯 **Three difficulty levels**  
-Choose between Easy, Medium, and Hard – a new grid awaits you every time you open the app.
+🎯 **Difficulty levels**  
+Choose between Easy, Medium, Hard, Really Hard and Super Hard – a new grid awaits you every time you open the app.
 
 🔄 **Infinite puzzles**  
 You'll never run out of games to play: every match generates a unique new puzzle.
@@ -16,7 +16,10 @@ You'll never run out of games to play: every match generates a unique new puzzle
 The interface adapts to your phone and your preferred theme (light or dark) for a comfortable experience.
 
 📱 **Play Offline**  
-No internet needed. Open the app and play whenever, wherever you want.
+No internet needed. Open the app and play whenever and wherever you want.
+
+🚫 **No Ads**  
+Play uninterrupted: your favorite game without any ads or distractions
 
 ✅ **Real-Time Validation**  
 The app tells you immediately if a number is invalid, so you learn as you play.
