@@ -7,9 +7,4 @@ data class CellState(
     val isError: Boolean = false
 )
 
-data class GameSaveState(
-    val difficulty: String,
-    val playTimeSeconds: Long,
-    val gridState: List<List<CellState>>
-)
 

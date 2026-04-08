@@ -4,21 +4,23 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
-import com.maiku.maikudoku.data.GameRepository
 import com.maiku.maikudoku.domain.model.CellState
 import com.maiku.maikudoku.domain.model.Difficulty
-import com.maiku.maikudoku.domain.model.GameSaveState
 import com.maiku.maikudoku.domain.sudoku.SudokuBoard
 import com.maiku.maikudoku.domain.sudoku.SudokuGenerator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+private const val MAX_ERRORS = 4
 
 data class CellPosition(val row: Int, val col: Int)
 
@@ -30,7 +32,9 @@ data class SudokuUiState(
     val invalidCells: Set<CellPosition> = emptySet(),
     val isCompleted: Boolean = false,
     val isLoading: Boolean = false,
-    val playTimeSeconds: Long = 0L
+    val playTimeSeconds: Long = 0L,
+    val errorCount: Int = 0,
+    val showGameOverDialog: Boolean = false
 )
 
 class SudokuViewModel(
@@ -40,35 +44,25 @@ class SudokuViewModel(
 
     private val generator = SudokuGenerator()
     private val selectedDifficulty = Difficulty.fromRoute(savedStateHandle.get<String>("difficulty"))
-    private val repository = GameRepository.from(application)
     private var timerJob: Job? = null
+    private val errorResetJobs = mutableMapOf<CellPosition, Job>()
 
     private val _uiState = MutableStateFlow(
         SudokuUiState(difficulty = selectedDifficulty)
     )
     val uiState: StateFlow<SudokuUiState> = _uiState.asStateFlow()
+    val completedNumbers: StateFlow<Set<Int>> = uiState
+        .map { state -> computeCompletedNumbers(state.gridState) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     init {
-        restoreOrCreateGame()
+        generateBoard()
         startTimer()
-    }
-
-    private fun restoreOrCreateGame() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val savedState = repository.loadGame().first()
-
-            if (savedState == null || Difficulty.fromRoute(savedState.difficulty) != selectedDifficulty) {
-                generateBoard()
-                return@launch
-            }
-
-            restoreFromSave(savedState)
-        }
     }
 
     fun generateBoard() {
         viewModelScope.launch {
+            cancelErrorResetJobs()
             _uiState.update { it.copy(isLoading = true) }
             val generatedBoard = generator.generate(selectedDifficulty)
             val gridState = generatedBoard.cells.mapIndexed { rowIndex, row ->
@@ -89,17 +83,11 @@ class SudokuViewModel(
                     invalidCells = emptySet(),
                     isCompleted = false,
                     isLoading = false,
-                    playTimeSeconds = 0L
+                    playTimeSeconds = 0L,
+                    errorCount = 0,
+                    showGameOverDialog = false
                 )
             }
-            persistCurrentGame()
-        }
-    }
-
-    fun persistCurrentGame() {
-        viewModelScope.launch {
-            val saveState = _uiState.value.toGameSaveState() ?: return@launch
-            repository.saveGame(saveState)
         }
     }
 
@@ -113,7 +101,14 @@ class SudokuViewModel(
     fun setCellValue(value: Int) {
         if (value !in 1..9) return
 
+        var invalidSelection: CellPosition? = null
+        var invalidValue: Int? = null
+
         _uiState.update { currentState ->
+            if (currentState.showGameOverDialog || currentState.isCompleted) {
+                return@update currentState
+            }
+
             val selectedCell = currentState.selectedCell ?: return@update currentState
 
             val currentCell = currentState.gridState.getOrNull(selectedCell.row)?.getOrNull(selectedCell.col)
@@ -129,13 +124,34 @@ class SudokuViewModel(
                 value = value,
                 isError = !isValidMove
             )
-            buildUpdatedState(currentState, newGrid)
+            val updatedState = buildUpdatedState(currentState, newGrid)
+
+            if (isValidMove) {
+                updatedState
+            } else {
+                invalidSelection = selectedCell
+                invalidValue = value
+                val nextErrorCount = (currentState.errorCount + 1).coerceAtMost(MAX_ERRORS)
+                updatedState.copy(
+                    errorCount = nextErrorCount,
+                    showGameOverDialog = nextErrorCount >= MAX_ERRORS
+                )
+            }
         }
-        persistCurrentGame()
+
+        val targetCell = invalidSelection
+        val targetValue = invalidValue
+        if (targetCell != null && targetValue != null) {
+            scheduleInvalidCellReset(targetCell, targetValue)
+        }
     }
 
     fun clearSelectedCell() {
         _uiState.update { currentState ->
+            if (currentState.showGameOverDialog) {
+                return@update currentState
+            }
+
             val selectedCell = currentState.selectedCell ?: return@update currentState
 
             val currentCell = currentState.gridState.getOrNull(selectedCell.row)?.getOrNull(selectedCell.col)
@@ -152,35 +168,6 @@ class SudokuViewModel(
             )
             buildUpdatedState(currentState, newGrid)
         }
-        persistCurrentGame()
-    }
-
-    private fun restoreFromSave(saveState: GameSaveState) {
-        val restoredDifficulty = Difficulty.fromRoute(saveState.difficulty)
-        val restoredGrid = saveState.gridState
-        val restoredCells = restoredGrid.map { row -> row.map { it.value } }
-        val restoredFixed = restoredGrid.map { row -> row.map { it.isFixed } }
-
-        _uiState.update {
-            val invalidCells = computeInvalidCells(restoredCells)
-            val isCompleted = invalidCells.isEmpty() && restoredCells.all { row -> row.all { value -> value != 0 } }
-
-            it.copy(
-                difficulty = restoredDifficulty,
-                board = SudokuBoard(
-                    cells = restoredCells,
-                    fixed = restoredFixed,
-                    // Solution is not required for current validation flow; keep restored snapshot.
-                    solution = restoredCells
-                ),
-                gridState = restoredGrid,
-                selectedCell = null,
-                invalidCells = invalidCells,
-                isCompleted = isCompleted,
-                isLoading = false,
-                playTimeSeconds = saveState.playTimeSeconds
-            )
-        }
     }
 
     private fun startTimer() {
@@ -189,7 +176,12 @@ class SudokuViewModel(
             while (isActive) {
                 delay(1000)
                 _uiState.update { currentState ->
-                    if (currentState.board == null || currentState.isCompleted || currentState.isLoading) {
+                    if (
+                        currentState.board == null ||
+                        currentState.isCompleted ||
+                        currentState.isLoading ||
+                        currentState.showGameOverDialog
+                    ) {
                         currentState
                     } else {
                         currentState.copy(playTimeSeconds = currentState.playTimeSeconds + 1)
@@ -202,18 +194,40 @@ class SudokuViewModel(
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
+        cancelErrorResetJobs()
     }
 
-    private fun SudokuUiState.toGameSaveState(): GameSaveState? {
-        val serializableGrid = gridState
-        if (serializableGrid.size != 9 || serializableGrid.any { it.size != 9 }) return null
+    private fun scheduleInvalidCellReset(position: CellPosition, invalidValue: Int) {
+        errorResetJobs.remove(position)?.cancel()
 
-        return GameSaveState(
-            difficulty = difficulty.routeValue,
-            playTimeSeconds = playTimeSeconds,
-            gridState = serializableGrid
-        )
+        errorResetJobs[position] = viewModelScope.launch {
+            delay(5000L)
+
+            _uiState.update { currentState ->
+                val row = currentState.gridState.getOrNull(position.row) ?: return@update currentState
+                val currentCell = row.getOrNull(position.col) ?: return@update currentState
+
+                if (!currentCell.isError || currentCell.value != invalidValue || currentCell.isFixed) {
+                    return@update currentState
+                }
+
+                val newGrid = currentState.gridState.map { it.toMutableList() }
+                newGrid[position.row][position.col] = currentCell.copy(
+                    value = 0,
+                    isError = false
+                )
+
+                buildUpdatedState(currentState, newGrid)
+            }
+            errorResetJobs.remove(position)
+        }
     }
+
+    private fun cancelErrorResetJobs() {
+        errorResetJobs.values.forEach { it.cancel() }
+        errorResetJobs.clear()
+    }
+
 
     private fun buildUpdatedState(
         currentState: SudokuUiState,
@@ -318,6 +332,23 @@ class SudokuViewModel(
         }
 
         return invalid
+    }
+
+    private fun computeCompletedNumbers(grid: List<List<CellState>>): Set<Int> {
+        if (grid.isEmpty()) return emptySet()
+
+        val counts = IntArray(10)
+        grid.forEach { row ->
+            row.forEach { cell ->
+                val value = cell.value
+                if (value in 1..9 && !cell.isError) {
+                    counts[value]++
+                }
+            }
+        }
+
+        return (1..9)
+            .filterTo(mutableSetOf()) { number -> counts[number] >= 9 }
     }
 }
 

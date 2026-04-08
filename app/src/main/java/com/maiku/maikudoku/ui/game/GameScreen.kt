@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,9 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.maiku.maikudoku.R
 import com.maiku.maikudoku.domain.model.CellState
 import java.util.Locale
@@ -55,21 +53,9 @@ fun GameScreen(
     viewModel: SudokuViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val completedNumbers by viewModel.completedNumbers.collectAsStateWithLifecycle()
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.persistCurrentGame()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -125,6 +111,17 @@ fun GameScreen(
                 modifier = Modifier.padding(4.dp)
             )
 
+            Text(
+                text = stringResource(
+                    id = R.string.game_errors_counter,
+                    uiState.errorCount
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
 
             when {
@@ -140,7 +137,8 @@ fun GameScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     NumberPad(
-                        onValueSelected = viewModel::setCellValue
+                        onValueSelected = viewModel::setCellValue,
+                        completedNumbers = completedNumbers
                     )
 
                     if (uiState.isCompleted) {
@@ -150,11 +148,19 @@ fun GameScreen(
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.titleMedium
                         )
-                    } else if (uiState.invalidCells.isNotEmpty()) {
+                    }
+                    if (uiState.invalidCells.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(id = R.string.game_invalid_moves_message),
                             color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(id = R.string.game_all_good),
+                            color = Color.Black,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -189,7 +195,6 @@ fun GameScreen(
                     TextButton(onClick = {
                         @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
                         run { showExitDialog = false }
-                        viewModel.persistCurrentGame()
                         onNavigateHome()
                     }) {
                         Text(
@@ -198,6 +203,30 @@ fun GameScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+            }
+        )
+    }
+
+    if (uiState.showGameOverDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = {
+                Text(
+                    text = stringResource(id = R.string.game_over_dialog_title),
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(text = stringResource(id = R.string.game_over_dialog_message))
+            },
+            confirmButton = {
+                TextButton(onClick = onNavigateHome) {
+                    Text(
+                        text = stringResource(id = R.string.game_over_dialog_confirm),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         )
@@ -331,18 +360,22 @@ private fun formatPlayTime(totalSeconds: Long): String {
 @Composable
 private fun NumberPad(
     onValueSelected: (Int) -> Unit,
+    completedNumbers: Set<Int>,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
             (1..9).forEach { value ->
-                Box(
+                Button(
+                    onClick = { onValueSelected(value) },
+                    enabled = value !in completedNumbers,
                     modifier = Modifier
                         .weight(1f)
-                        .aspectRatio(1f)
-                        .background(MaterialTheme.colorScheme.background)
-                        .clickable { onValueSelected(value) },
-                    contentAlignment = Alignment.Center
+                        .aspectRatio(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        disabledContentColor = Color.Gray
+                    )
                 ) {
                     Text(
                         text = value.toString(),
