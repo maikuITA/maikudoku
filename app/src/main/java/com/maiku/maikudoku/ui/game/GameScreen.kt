@@ -50,6 +50,7 @@ fun GameScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val board = uiState.board
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
@@ -112,8 +113,7 @@ fun GameScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     NumberPad(
-                        onValueSelected = viewModel::setCellValue,
-                        onClear = viewModel::clearSelectedCell
+                        onValueSelected = viewModel::setCellValue
                     )
 
                     if (uiState.isCompleted) {
@@ -139,7 +139,7 @@ fun GameScreen(
 
     if (showExitDialog) {
         AlertDialog(
-            onDismissRequest = { showExitDialog = false },
+            onDismissRequest = { },
             title = { Text(text = stringResource(id = R.string.game_exit_dialog_title)) },
             text = { Text(text = stringResource(id = R.string.game_exit_dialog_message)) },
             confirmButton = {
@@ -148,14 +148,18 @@ fun GameScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { showExitDialog = false }) {
+                    TextButton(onClick = {
+                        @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
+                        showExitDialog = false
+                    }) {
                         Text(
                             text = stringResource(id = R.string.game_exit_dialog_cancel),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     TextButton(onClick = {
-                        showExitDialog = false
+                        @Suppress("ASSIGNED_BUT_NEVER_ACCESSED")
+                        run { showExitDialog = false }
                         onNavigateHome()
                     }) {
                         Text(
@@ -300,7 +304,6 @@ private fun isInSelectedRowOrColumn(
 @Composable
 private fun NumberPad(
     onValueSelected: (Int) -> Unit,
-    onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
