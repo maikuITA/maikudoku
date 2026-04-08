@@ -8,10 +8,10 @@ val Sage80 = Color(0xFF9BC7B9)
 val SageContainer80 = Color(0xFFD8E7E1)
 val Clay80 = Color(0xFFE0B293)
 
-val Sage40 = Color(0xFF5E8B7E)
+val Sage40 = Color(0xFF673AB7)
 val SageContainer40 = Color(0xFF27433B)
-val Clay40 = Color(0xFFB57A5A)
+val Clay40 = Color(0xFFC06635)
 
-val Ivory = Color(0xFFF7F4EE)
+val Ivory = Color(0xFFF6E1C5)
 val Ink = Color(0xFF1F2320)
 val SurfaceDark = Color(0xFF141816)

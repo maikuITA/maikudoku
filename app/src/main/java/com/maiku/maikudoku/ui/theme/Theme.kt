@@ -32,15 +32,15 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Sage40,
+    primary = Color(0xFF1C7FCE),
     onPrimary = Color.White,
     primaryContainer = SageContainer80,
     onPrimaryContainer = Ink,
-    secondary = Clay40,
+    secondary = Color(0xFF422705),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFF1DDD0),
     onSecondaryContainer = Ink,
-    tertiary = Color(0xFF6F7D84),
+    tertiary = Color(0x401C7FCE),
     background = Ivory,
     onBackground = Ink,
     surface = Ivory,
@@ -48,7 +48,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFE7E1D8),
     outline = Color(0xFF7F8A83),
     error = Color(0xFFB3261E),
-    onError = Color.White
+    onError = Color.White,
 )
 
 @Composable

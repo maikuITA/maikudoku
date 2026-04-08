@@ -1,23 +1,19 @@
 package com.maiku.maikudoku.ui.game
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,7 +36,6 @@ import androidx.compose.ui.graphics.Color.Companion.hsl
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -74,28 +69,33 @@ fun GameScreen(
             )
         }
     ) { innerPadding ->
-        Row(
+        Column(
             modifier = Modifier
                 .padding(innerPadding)
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Top
-
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = stringResource(id = R.string.game_difficulty_label),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = uiState.difficulty.displayName,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(id = R.string.game_difficulty_label),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = uiState.difficulty.displayName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             when {
                 uiState.isLoading -> CircularProgressIndicator()
@@ -105,17 +105,16 @@ fun GameScreen(
                         fixed = board.fixed,
                         selectedCell = uiState.selectedCell,
                         invalidCells = uiState.invalidCells,
-                        onCellClick = viewModel::selectCell
+                        onCellClick = viewModel::selectCell,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     NumberPad(
                         onValueSelected = viewModel::setCellValue,
                         onClear = viewModel::clearSelectedCell
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = viewModel::generateBoard) {
-                        Text(text = stringResource(id = R.string.game_new_grid_button))
-                    }
 
                     if (uiState.isCompleted) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -183,8 +182,6 @@ private fun SudokuGrid(
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
             .background(MaterialTheme.colorScheme.background)
             .drawWithContent {
                 drawContent()
@@ -225,7 +222,7 @@ private fun SudokuGrid(
                         value = value,
                         isFixed = isFixed,
                         isSelected = selectedCell == position,
-                        isRelatedToSelection = isRelatedToSelection(selectedCell, position),
+                        isInSelectedBlock = isInSelectedBlock(selectedCell, position),
                         isInvalid = position in invalidCells,
                         onClick = { onCellClick(rowIndex, colIndex) },
                         modifier = Modifier.weight(1f)
@@ -241,12 +238,18 @@ private fun SudokuCell(
     value: Int,
     isFixed: Boolean,
     isSelected: Boolean,
-    isRelatedToSelection: Boolean,
+    isInSelectedBlock: Boolean,
     isInvalid: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = MaterialTheme.colorScheme.background
+    val backgroundColor = when {
+        isSelected -> MaterialTheme.colorScheme.tertiary
+        isInSelectedBlock -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.background
+    }
+
+    val textColor = MaterialTheme.colorScheme.secondary
 
     Box(
         modifier = modifier
@@ -259,23 +262,19 @@ private fun SudokuCell(
             text = if (value == 0) "" else value.toString(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Normal,
-            color = hsl(36f, 1f, 0.163f)
+            color = textColor
         )
     }
 }
 
-private fun isRelatedToSelection(
+private fun isInSelectedBlock(
     selectedCell: CellPosition?,
     currentCell: CellPosition
 ): Boolean {
     if (selectedCell == null || selectedCell == currentCell) return false
 
-    val sameRow = selectedCell.row == currentCell.row
-    val sameColumn = selectedCell.col == currentCell.col
-    val sameBlock = (selectedCell.row / 3 == currentCell.row / 3) &&
+    return (selectedCell.row / 3 == currentCell.row / 3) &&
         (selectedCell.col / 3 == currentCell.col / 3)
-
-    return sameRow || sameColumn || sameBlock
 }
 
 @Composable
@@ -285,27 +284,22 @@ private fun NumberPad(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
             (1..9).forEach { value ->
-                Button(
-                    onClick = { onValueSelected(value) },
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .aspectRatio(1f),
-                    shape = RoundedCornerShape(0.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                        .aspectRatio(1f)
+                        .background(MaterialTheme.colorScheme.background)
+                        .clickable { onValueSelected(value) },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = value.toString(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text(
+                        text = value.toString(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Normal,
+                        color = hsl(36f, 1f, 0.163f)
+                    )
                 }
             }
         }

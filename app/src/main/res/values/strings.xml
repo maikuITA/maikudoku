@@ -1,8 +1,9 @@
 <resources>
     <string name="app_name">maikudoku</string>
     <string name="menu_title">Select difficulty</string>
+    <string name="menu_history_button">Match history</string>
     <string name="game_home_button">Home</string>
-    <string name="game_difficulty_label">Difficulty: </string>
+    <string name="game_difficulty_label">Difficulty:</string>
     <string name="game_new_grid_button">New game</string>
     <string name="game_completed_message">Sudoku completed!</string>
     <string name="game_invalid_moves_message">There are invalid moves</string>
